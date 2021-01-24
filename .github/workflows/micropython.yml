@@ -3,6 +3,8 @@ name: MicroPython
 on:
   push:
   pull_request:
+  release:
+    types: [created]
 
 env:
   # Customize the CMake build type here (Release, Debug, RelWithDebInfo, etc.)
@@ -30,11 +32,11 @@ jobs:
         repository: pimoroni/micropython
         ref: usermod-rescue
         submodules: false  # MicroPython submodules are hideously broken
-        path: micropython
+        path: ${{runner.workspace}}/micropython
 
     - uses: actions/checkout@v2
       with:
-        path: pimoroni-pico
+        path: ${{runner.workspace}}/pimoroni-pico
 
     # Linux deps
     - name: Install deps
@@ -44,20 +46,31 @@ jobs:
 
     - name: Fetch base MicroPython submodules
       shell: bash
-      working-directory: micropython
+      working-directory: ${{runner.workspace}}/micropython
       run: git submodule update --init
 
     - name: Fetch Pico SDK submodules
       shell: bash
-      working-directory: micropython/lib/pico-sdk
+      working-directory: ${{runner.workspace}}/micropython/lib/pico-sdk
       run: git submodule update --init
 
     - name: Build mpy-cross
       shell: bash
-      working-directory: micropython/mpy-cross
+      working-directory: ${{runner.workspace}}/micropython/mpy-cross
       run: make
 
     - name: Build MicroPython
       shell: bash
-      working-directory: micropython/ports/rp2
+      working-directory: ${{runner.workspace}}/micropython/ports/rp2
       run: make USER_C_MODULES=../../../pimoroni-pico/micropython/modules -j2
+
+    - name: Upload .uf2
+      if: github.event_name == 'release'
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{secrets.GITHUB_TOKEN}}
+      with:
+        asset_path: ${{runner.workspace}}/micropython/ports/rp2/build/firmware.uf2
+        upload_url: ${{github.event.release.upload_url}}
+        asset_name: pimoroni-pico-micropython.uf2
+        asset_content_type: application/octet-stream
